@@ -1,0 +1,110 @@
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: url-shortener
+spec:
+  replicas: 2                 # start with 2 — HPA will scale up from here
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1             # spin up 1 new pod before killing old ones
+      maxUnavailable: 0       # never take a pod down without a replacement — zero downtime
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          # CI/CD replaces this image tag on every deploy via:
+          # kubectl set image deployment/backend backend=IMAGE:SHA
+          image: us-central1-docker.pkg.dev/url-shortener-devops/url-shortener/backend:latest
+          ports:
+            - containerPort: 5000
+          # Pull env from ConfigMap (non-sensitive)
+          envFrom:
+            - configMapRef:
+                name: app-config
+          # Pull DB password from Secret (sensitive)
+          env:
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASS
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_USER
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_NAME
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          # Liveness probe — restart pod if it stops responding
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          # Readiness probe — only send traffic when pod is actually ready
+          # Without this, Kubernetes sends requests to pods that haven't finished starting
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: url-shortener
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 80
+      targetPort: 5000
+  type: ClusterIP
+
+---
+# ── Horizontal Pod Autoscaler ─────────────────────────────────────────────────
+# When average CPU across all backend pods goes above 60%,
+# Kubernetes adds more pods automatically. Scales back down when traffic drops.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: url-shortener
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

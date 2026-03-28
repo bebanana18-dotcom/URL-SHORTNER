@@ -1,0 +1,92 @@
+# ── Persistent Volume Claim ───────────────────────────────────────────────────
+# Asks GCP to provision a persistent disk for Postgres data.
+# Without this, every pod restart wipes your database. Which would be bad.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: url-shortener
+spec:
+  accessModes:
+    - ReadWriteOnce         # one pod can read/write at a time — fine for Postgres
+  resources:
+    requests:
+      storage: 5Gi          # 5GB disk — more than enough for a URL shortener
+  storageClassName: standard-rwo   # GKE's default SSD-backed storage class
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: url-shortener
+spec:
+  replicas: 1               # only ever 1 postgres replica — it's a stateful DB
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASS
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          # Resource limits — prevents one runaway container eating the whole node
+          resources:
+            requests:
+              cpu: "100m"       # 0.1 CPU core
+              memory: "256Mi"
+            limits:
+              cpu: "500m"       # 0.5 CPU core max
+              memory: "512Mi"
+          # Liveness probe — restart pod if postgres stops responding
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+# Gives postgres a stable DNS name inside the cluster: "postgres-service"
+# Backend uses this name as DB_HOST — no IP addresses needed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: url-shortener
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP             # internal only — never exposed to the internet

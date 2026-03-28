@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: url-shortener
+data:
+  DB_HOST: "postgres-service"   # matches the postgres Service name below
+  DB_PORT: "5432"
+  REDIS_HOST: "redis-service"   # matches the redis Service name below
+  NODE_ENV: "production"
+  BASE_URL: "https://short-url.abc-app.org"   # replace with your actual domain or LB IP

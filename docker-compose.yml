@@ -1,0 +1,105 @@
+version: '3.9'
+
+# ─── NETWORKS ─────────────────────────────────────────────────────────────────
+# All services talk on one private network.
+# "backend" resolves to the backend container, "postgres" to postgres, etc.
+# Nothing is exposed to the internet except the ports we explicitly map below.
+networks:
+  app-network:
+    driver: bridge
+
+# ─── VOLUMES ──────────────────────────────────────────────────────────────────
+# Named volume for Postgres data — survives container restarts.
+# Without this, every `docker compose down` wipes your database.
+volumes:
+  postgres-data:
+  redis-data:
+
+# ─── SERVICES ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: url_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: urlshortener
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres      # change this for anything beyond local dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NOT exposing 5432 externally — only backend needs it, and it's on the same network
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: url_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes   # persist cache to disk across restarts
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NOT exposing 6379 externally — only backend needs it
+
+  # ── Backend (Node.js) ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend           # Docker looks for Dockerfile here
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: url_backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres            # Docker DNS — resolves to the postgres container
+      DB_PORT: 5432
+      DB_NAME: urlshortener
+      DB_USER: postgres
+      DB_PASS: postgres
+      REDIS_HOST: redis            # Docker DNS — resolves to the redis container
+      BASE_URL: http://localhost:5000
+      NODE_ENV: production
+    ports:
+      - "5000:5000"                # localhost:5000 → container:5000
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy  # waits for postgres healthcheck to pass
+      redis:
+        condition: service_healthy  # waits for redis healthcheck to pass
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Frontend (React + Nginx) ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000   # baked into the React build at build time
+    container_name: url_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"                  # localhost:3000 → nginx inside container on port 80
+    networks:
+      - app-network
+    depends_on:
+      backend:
+        condition: service_healthy

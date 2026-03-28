@@ -1,0 +1,119 @@
+# Install Nginx Ingress Controller first (once, in terminal):
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
+#
+# Install cert-manager for automatic TLS (once, in terminal):
+# kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+
+---
+# ── ClusterIssuer ─────────────────────────────────────────────────────────────
+# # Tells cert-manager: "use Let's Encrypt to issue TLS certs"
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: your-email@example.com    # replace with your real email — Let's Encrypt sends expiry alerts
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-key
+#     solvers:
+#       - http01:
+#           ingress:
+#             class: nginx
+
+---
+# # ── Ingress ───────────────────────────────────────────────────────────────────
+# # Nginx Ingress reads this and configures itself.
+# # GKE automatically creates a Cloud Load Balancer with a public IP.
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: url-shortener-ingress
+#   namespace: url-shortener
+#   annotations:
+#     # Use the Nginx Ingress Controller (not GKE's built-in one)
+#     kubernetes.io/ingress.class: nginx
+#     # Tell cert-manager to issue a cert for this Ingress automatically
+#     cert-manager.io/cluster-issuer: letsencrypt-prod
+#     # Redirect HTTP to HTTPS — nobody should hit port 80 in production
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#     # Increase body size limit (default 1MB — fine for URLs, overkill for files)
+#     nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+# spec:
+#   tls:
+#     - hosts:
+#         - your-domain.com          # replace with your actual domain
+#       secretName: tls-secret       # cert-manager stores the cert here automatically
+#   rules:
+#     - host: your-domain.com        # replace with your actual domain
+#       http:
+#         paths:
+#           # /api/* and /:code/* → backend
+#           - path: /api
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: backend-service
+#                 port:
+#                   number: 5000
+#           - path: /shorten
+#             pathType: Exact
+#             backend:
+#               service:
+#                 name: backend-service
+#                 port:
+#                   number: 5000
+#           # All other paths → frontend (React)
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: frontend-service
+#                 port:
+#                   number: 80
+
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: url-shortener-ingress
+  namespace: url-shortener
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "url-shortener-ip"
+    # Google Managed SSL Certificates
+    networking.gke.io/managed-certificates: managed-cert-for-ingress
+    # SSL Redirect HTTP to HTTPS
+    networking.gke.io/v1beta1.FrontendConfig: "my-frontend-config" 
+spec:
+  #ingressClassName: gce
+  defaultBackend:
+    service:
+      name: frontend-service
+      port:
+        number: 80
+  rules:
+    - http:
+        paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: backend-service
+              port:
+                number: 80
+        - path: /shorten
+          pathType: Exact
+          backend:
+            service:
+              name: backend-service
+              port:
+                number: 80
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: frontend-service
+              port:
+                number: 80                  
