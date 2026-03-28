@@ -94,7 +94,7 @@ spec:
       port:
         number: 80
   rules:
-    - host: http://short-url.abc-app.org/
+    - host: http://short-url.abc-app.org
       http:
         paths:
         - path: /api
