@@ -23,7 +23,7 @@ spec:
         - name: backend
           # CI/CD replaces this image tag on every deploy via:
           # kubectl set image deployment/backend backend=IMAGE:SHA
-          image: us-central1-docker.pkg.dev/url-shortener-devops/url-shortener/backend:latest
+          image: us-central1-docker.pkg.dev/piyush-gcp/url-shortener/backend:latest
           ports:
             - containerPort: 5000
           # Pull env from ConfigMap (non-sensitive)
