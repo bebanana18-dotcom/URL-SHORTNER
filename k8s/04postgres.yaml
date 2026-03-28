@@ -55,6 +55,7 @@ spec:
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
+              subPath: postgres
           # Resource limits — prevents one runaway container eating the whole node
           resources:
             requests:
