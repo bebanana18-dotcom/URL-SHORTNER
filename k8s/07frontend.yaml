@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: us-central1-docker.pkg.dev/url-shortener-devops/url-shortener/frontend:latest
+          image: us-central1-docker.pkg.dev/piyush-gcp/url-shortener/frontend:latest
           ports:
             - containerPort: 80
           resources:
