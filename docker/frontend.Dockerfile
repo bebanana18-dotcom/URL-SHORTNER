@@ -13,7 +13,7 @@ COPY . .
 
 # Inject the backend API URL at build time
 # docker-compose passes this via build args
-ARG VITE_API_URL=http://localhost:5000
+ARG VITE_API_URL=http://short-url.abc-app.org
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
