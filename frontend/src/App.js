@@ -115,7 +115,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API}/shorten`, {
+      const res = await axios.post(`${API}/api/shorten`, {
         originalUrl: longUrl.trim(),
       });
 
