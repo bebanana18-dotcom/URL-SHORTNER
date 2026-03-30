@@ -2,7 +2,7 @@ apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
 metadata:
   name: my-frontend-config
-  Namespace:  url-shortener
+  namespace:  url-shortener
 spec:
   redirectToHttps:
     enabled: true
