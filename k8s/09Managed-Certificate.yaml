@@ -2,6 +2,7 @@ apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
   name: managed-cert-for-ingress
+  namespace: url-shortener
 spec:
   domains:
     - short-url.abc-app.org
