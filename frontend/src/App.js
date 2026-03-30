@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 
-const API = process.env.VITE_API_URL || 'http://short-url.abc-app.org';
+const API = process.env.VITE_API_URL || 'https://short-url.abc-app.org';
 
 // ─── CLIENT-SIDE URL VALIDATOR ───────────────────────────────────────────────
 // Mirrors backend logic so we catch garbage before wasting a network request
